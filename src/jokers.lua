@@ -290,7 +290,6 @@ SMODS.Joker:take_ownership("scholar", {
 			local seals = { "Gold", "Red", "Blue", "Purple" }
 			local selected_seal = pseudorandom_element(seals, pseudoseed('scholar_seal'))
 			local scored_ace = context.other_card
-			local joker_card = card
 
 			if not selected_seal then
 				return nil, true
@@ -298,20 +297,18 @@ SMODS.Joker:take_ownership("scholar", {
 
 			return {
 				extra = {
+					message = "Sealed",
+					colour = G.C.ATTENTION,
+					card = card,
 					func = function()
 						if scored_ace and scored_ace.set_seal and not scored_ace.seal then
 							G.E_MANAGER:add_event(Event({
-								trigger = 'immediate',
+								trigger = 'before',
 								delay = 0.0,
 								func = function()
 									if scored_ace and scored_ace.set_seal and not scored_ace.seal then
 										scored_ace:set_seal(selected_seal, true)
 										scored_ace:juice_up()
-										card_eval_status_text(joker_card, 'extra', nil, nil, nil, {
-											message = "Sealed",
-											colour = G.C.ATTENTION,
-											card = joker_card,
-										})
 									end
 									return true
 								end,
