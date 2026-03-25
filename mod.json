@@ -1,0 +1,17 @@
+{
+	"id": "first_mod",
+	"name": "First Mod",
+	"display_name": "First Mod",
+	"author": ["Jonah Cran"],
+	"description": "A simple first mod for testing purposes.",
+	"prefix": "FirstMod",
+	"main_file": "main.lua",
+	"priority": -20,
+	"badge_colour": "8403fc",
+	"badge_text_colour": "ffffff",
+	"version": "1.0.0",
+	"dependencies": [
+		"Steamodded (>=1.0.0~)",
+		"Lovely (>=0.6.0)"
+	]
+}
