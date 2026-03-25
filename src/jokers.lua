@@ -196,6 +196,26 @@ SMODS.Joker:take_ownership("seance", {
 	end,
 }, true)
 
+SMODS.Joker:take_ownership("scholar", {
+	blueprint_compat = true,
+	calculate = function(self, card, context)
+		if context.individual and context.cardarea == G.play and context.other_card:get_id() == 14 then
+			local seals = { "Gold", "Red", "Blue", "Purple" }
+			local selected_seal = pseudorandom_element(seals, pseudoseed('scholar_seal'))
+
+			if selected_seal and context.other_card.set_seal then
+				context.other_card:set_seal(selected_seal, true)
+			end
+
+			return {
+				message = selected_seal .. " Seal",
+				colour = G.C.ATTENTION,
+				card = card,
+			}, true
+		end
+	end,
+}, true)
+
 
 
 

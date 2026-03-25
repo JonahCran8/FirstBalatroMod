@@ -24,6 +24,14 @@ return {
                     "{C:attention}#1#{}, turns all",
                     "{C:attention}consumables{} {C:dark_edition}Negative{}"
                 }
+            },
+            j_scholar = {
+                name = "Scholar",
+                text = {
+                    "Played {C:attention}Aces{} gain a",
+                    "random {C:attention}Seal{}",
+                    "when scored"
+                }
             }
         }
     }
