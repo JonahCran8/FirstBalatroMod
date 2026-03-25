@@ -32,6 +32,14 @@ return {
                     "random {C:attention}Seal{}",
                     "when scored"
                 }
+            },
+            j_superposition = {
+                name = "Superposition",
+                text = {
+                    "{C:attention}Straights{} can",
+                    "wrap around {C:attention}Aces{}",
+                    "(ex: {C:attention}Q K A 2 3{})"
+                }
             }
         }
     }

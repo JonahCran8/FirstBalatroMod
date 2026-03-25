@@ -1,4 +1,78 @@
--- Loyalty card triggers every 'remaining' + 1 times, so we set remaining = 4 to make it take 5 hands to trigger rather then 6.
+if not _G.firstbalatromod_wrapped_straights_patched and type(get_straight) == "function" then
+	_G.firstbalatromod_wrapped_straights_patched = true
+
+	local vanilla_get_straight = get_straight
+
+	get_straight = function(hand)
+		local ret = vanilla_get_straight(hand)
+		if next(ret) then
+			return ret
+		end
+
+		if not next(find_joker('Superposition')) then
+			return ret
+		end
+
+		local four_fingers = next(find_joker('Four Fingers'))
+		local needed = 5 - (four_fingers and 1 or 0)
+		if #hand > 5 or #hand < needed then
+			return ret
+		end
+
+		local can_skip = next(find_joker('Shortcut'))
+		local ids = {}
+		for i = 1, #hand do
+			local id = hand[i]:get_id()
+			if id > 1 and id < 15 then
+				if ids[id] then
+					ids[id][#ids[id] + 1] = hand[i]
+				else
+					ids[id] = { hand[i] }
+				end
+			end
+		end
+
+		local ranks = { 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 }
+		for start = 1, #ranks do
+			local t = {}
+			local length = 0
+			local skipped_rank = false
+			local crossed_ace_boundary = false
+			local idx = start
+
+			for _ = 1, (#ranks + 1) do
+				local rank = ranks[idx]
+				if ids[rank] then
+					length = length + 1
+					for _, card in ipairs(ids[rank]) do
+						t[#t + 1] = card
+					end
+					skipped_rank = false
+				elseif can_skip and not skipped_rank then
+					skipped_rank = true
+				else
+					break
+				end
+
+				if rank == 14 then crossed_ace_boundary = true end
+				if crossed_ace_boundary and rank == 2 then crossed_ace_boundary = true end
+
+				if length >= needed then
+					if crossed_ace_boundary and t[1] then
+						return { t }
+					end
+					break
+				end
+
+				idx = (idx % #ranks) + 1
+			end
+		end
+
+		return ret
+	end
+end
+
+-- Loyalty card now takes 1 less hand to trigger
 SMODS.Joker:take_ownership("loyalty_card", {
 	config = {
 		extra = {
@@ -9,6 +83,7 @@ SMODS.Joker:take_ownership("loyalty_card", {
 	}
 }, true)
 
+-- Testing mult my adding 2 mult to all suit mult jokers
 SMODS.Joker:take_ownership("greedy_joker", {
 	config = {
 		extra = {
@@ -196,22 +271,58 @@ SMODS.Joker:take_ownership("seance", {
 	end,
 }, true)
 
+-- Scholar now gives aces a random seal when scoreed.
 SMODS.Joker:take_ownership("scholar", {
+	-- uncommon instead of common
+	rarity = 2,
 	blueprint_compat = true,
 	calculate = function(self, card, context)
-		if context.individual and context.cardarea == G.play and context.other_card:get_id() == 14 then
+		if context.before and context.cardarea == G.jokers and context.scoring_hand and not context.blueprint then
+			local aces = {}
 			local seals = { "Gold", "Red", "Blue", "Purple" }
-			local selected_seal = pseudorandom_element(seals, pseudoseed('scholar_seal'))
 
-			if selected_seal and context.other_card.set_seal then
-				context.other_card:set_seal(selected_seal, true)
+			for _, scored in ipairs(context.scoring_hand) do
+				if scored:get_id() == 14 and scored.set_seal and not scored.seal then
+					aces[#aces + 1] = scored
+					local selected_seal = pseudorandom_element(seals, pseudoseed('scholar_seal'))
+					if selected_seal then
+						local scored_card = scored
+						local seal_to_apply = selected_seal
+						G.E_MANAGER:add_event(Event({
+							trigger = 'immediate',
+							delay = 0.0,
+							func = function()
+								scored_card:set_seal(seal_to_apply, true)
+								scored_card:juice_up()
+								return true
+							end,
+						}))
+					end
+				end
 			end
 
-			return {
-				message = selected_seal .. " Seal",
-				colour = G.C.ATTENTION,
-				card = card,
-			}, true
+			if #aces > 0 then
+				return {
+					message = "Sealed",
+					colour = G.C.ATTENTION,
+					card = card,
+				}
+			end
+		end
+
+		if context.individual and context.cardarea == G.play and context.other_card:get_id() == 14 then
+			-- Block vanilla Scholar chips+mult on scored Aces.
+			return nil, true
+		end
+	end,
+}, true)
+
+SMODS.Joker:take_ownership("superposition", {
+	blueprint_compat = true,
+	calculate = function(self, card, context)
+		if context.joker_main then
+			-- Suppress vanilla Superposition Tarot generation; wrapped-straight logic is handled via get_straight override.
+			return nil, true
 		end
 	end,
 }, true)
