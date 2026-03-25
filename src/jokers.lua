@@ -277,42 +277,49 @@ SMODS.Joker:take_ownership("scholar", {
 	rarity = 2,
 	blueprint_compat = true,
 	calculate = function(self, card, context)
-		if context.before and context.cardarea == G.jokers and context.scoring_hand and not context.blueprint then
-			local aces = {}
-			local seals = { "Gold", "Red", "Blue", "Purple" }
-
-			for _, scored in ipairs(context.scoring_hand) do
-				if scored:get_id() == 14 and scored.set_seal and not scored.seal then
-					aces[#aces + 1] = scored
-					local selected_seal = pseudorandom_element(seals, pseudoseed('scholar_seal'))
-					if selected_seal then
-						local scored_card = scored
-						local seal_to_apply = selected_seal
-						G.E_MANAGER:add_event(Event({
-							trigger = 'immediate',
-							delay = 0.0,
-							func = function()
-								scored_card:set_seal(seal_to_apply, true)
-								scored_card:juice_up()
-								return true
-							end,
-						}))
-					end
-				end
-			end
-
-			if #aces > 0 then
-				return {
-					message = "Sealed",
-					colour = G.C.ATTENTION,
-					card = card,
-				}
-			end
-		end
-
 		if context.individual and context.cardarea == G.play and context.other_card:get_id() == 14 then
-			-- Block vanilla Scholar chips+mult on scored Aces.
-			return nil, true
+			if context.repetition then
+				return nil, true
+			end
+
+			-- Block vanilla Scholar chips+mult and only seal unsealed Aces.
+			if context.other_card.seal or not context.other_card.set_seal then
+				return nil, true
+			end
+
+			local seals = { "Gold", "Red", "Blue", "Purple" }
+			local selected_seal = pseudorandom_element(seals, pseudoseed('scholar_seal'))
+			local scored_ace = context.other_card
+			local joker_card = card
+
+			if not selected_seal then
+				return nil, true
+			end
+
+			return {
+				extra = {
+					func = function()
+						if scored_ace and scored_ace.set_seal and not scored_ace.seal then
+							G.E_MANAGER:add_event(Event({
+								trigger = 'immediate',
+								delay = 0.0,
+								func = function()
+									if scored_ace and scored_ace.set_seal and not scored_ace.seal then
+										scored_ace:set_seal(selected_seal, true)
+										scored_ace:juice_up()
+										card_eval_status_text(joker_card, 'extra', nil, nil, nil, {
+											message = "Sealed",
+											colour = G.C.ATTENTION,
+											card = joker_card,
+										})
+									end
+									return true
+								end,
+							}))
+						end
+					end,
+				}
+			}, true
 		end
 	end,
 }, true)
