@@ -273,44 +273,74 @@ SMODS.Joker:take_ownership("seance", {
 	end,
 }, true)
 
--- Scholar now gives aces a random seal when scoreed.
+-- Scholar: queue scored Aces, then seal them all after scoring resolves.
 SMODS.Joker:take_ownership("scholar", {
-	-- uncommon instead of common
 	rarity = 2,
 	blueprint_compat = true,
 	calculate = function(self, card, context)
-		if context.individual and context.cardarea == G.play and context.other_card:get_id() == 14 then
-			if context.repetition then
-				return nil, true
-			end
+		if not context then return nil, true end
 
-			-- Block vanilla Scholar chips+mult and only seal unsealed Aces.
-			if context.other_card.seal or not context.other_card.set_seal then
-				return nil, true
+		if context.before then
+			card.scholar_queued_aces = nil
+			card.scholar_apply_scheduled = nil
+			if type(context.full_hand) == "table" then
+				for _, hand_card in ipairs(context.full_hand) do
+					if hand_card then hand_card.scholar_queued = nil end
+				end
 			end
+		end
 
-			local seals = { "Gold", "Red", "Blue", "Purple" }
-			local selected_seal = pseudorandom_element(seals, pseudoseed('scholar_seal'))
-			local scored_ace = context.other_card
-
-			if not selected_seal then
-				return nil, true
+		if context.individual and context.cardarea == G.play and context.other_card and context.other_card:get_id() == 14 then
+			if context.repetition then return nil, true end
+			if context.other_card.set_seal and not context.other_card.seal and not context.other_card.scholar_queued then
+				if type(card.scholar_queued_aces) ~= "table" then
+					card.scholar_queued_aces = {}
+				end
+				context.other_card.scholar_queued = true
+				card.scholar_queued_aces[#card.scholar_queued_aces + 1] = context.other_card
 			end
-			
-			-- Joker activates when each card scores and applie a random seal if the card doesnt already have a seal
-			return {
-				extra = {
-					message = "Sealed",
-					colour = G.C.ATTENTION,
-					card = card,
-					func = function()
-						if scored_ace and scored_ace.set_seal and not scored_ace.seal then
-							scored_ace:set_seal(selected_seal, true)
-							scored_ace:juice_up()
+			return nil, true
+		end
+
+		if context.after and type(card.scholar_queued_aces) == "table" and #card.scholar_queued_aces > 0 then
+			if card.scholar_apply_scheduled then return nil, true end
+			card.scholar_apply_scheduled = true
+
+			local queued_aces = card.scholar_queued_aces
+			card.scholar_queued_aces = nil
+
+			G.E_MANAGER:add_event(Event({
+				trigger = 'after',
+				delay = 0.06,
+				func = function()
+					card.scholar_apply_scheduled = nil
+					local seals = { "Gold", "Red", "Blue", "Purple" }
+					local applied = 0
+					for _, queued_ace in ipairs(queued_aces) do
+						if queued_ace and queued_ace.set_seal and not queued_ace.seal then
+							local selected_seal = pseudorandom_element(seals, pseudoseed('scholar_seal'))
+							if selected_seal then
+								queued_ace:set_seal(selected_seal, true, true)
+								applied = applied + 1
+							end
 						end
-					end,
-				}
-			}, true
+						if queued_ace then queued_ace.scholar_queued = nil end
+					end
+
+					if applied > 0 then
+						juice_card(card)
+						card_eval_status_text(card, 'extra', nil, nil, nil, {
+							message = "Sealed",
+							colour = G.C.ATTENTION,
+							instant = true,
+						})
+						delay(0.25)
+					end
+					return true
+				end,
+			}))
+
+			return nil, true
 		end
 	end,
 }, true)

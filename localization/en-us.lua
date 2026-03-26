@@ -30,7 +30,7 @@ return {
                 text = {
                     "Played {C:attention}Aces{} gain a",
                     "random {C:attention}Seal{}",
-                    "when scored"
+                    "after scoring"
                 }
             },
             j_superposition = {
