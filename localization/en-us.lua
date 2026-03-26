@@ -41,6 +41,17 @@ return {
                     "(ex: {C:attention}Q K A 2 3{})"
                 }
             }
+        },
+
+        Enhanced = {
+            m_wild = {
+                name = "Wild Card",
+                text = {
+                    "{C:attention}Wild Cards{} count",
+                    "as all suits and",
+                    "cannot be debuffed"
+                }
+            }
         }
     }
 }

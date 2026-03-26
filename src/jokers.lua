@@ -55,7 +55,6 @@ if not _G.firstbalatromod_wrapped_straights_patched and type(get_straight) == "f
 				end
 
 				if rank == 14 then crossed_ace_boundary = true end
-				if crossed_ace_boundary and rank == 2 then crossed_ace_boundary = true end
 
 				if length >= needed then
 					if crossed_ace_boundary and t[1] then
@@ -78,7 +77,6 @@ SMODS.Joker:take_ownership("loyalty_card", {
 		extra = {
 			Xmult = 4,
 			every = 4,
-			remaining = "4 remaining"
 		}
 	}
 }, true)
@@ -223,8 +221,12 @@ SMODS.Joker:take_ownership("seance", {
     rarity = 3,
 	calculate = function(self, card, context)
 		if context.joker_main and context.poker_hands and next(context.poker_hands[card.ability.extra.poker_hand]) then
-			-- Queue effect for post-score timing and block vanilla Seance Spectral spawn.
-			card.ability.seance_pending_negative = true
+			-- Clear any stale flag from a previous round (e.g. loaded mid-round).
+			card.ability.seance_pending_negative = nil
+			if context.poker_hands and next(context.poker_hands[card.ability.extra.poker_hand]) then
+				-- Queue effect for post-score timing and block vanilla Seance Spectral spawn.
+				card.ability.seance_pending_negative = true
+			end
 			return nil, true
 		end
 
@@ -294,7 +296,8 @@ SMODS.Joker:take_ownership("scholar", {
 			if not selected_seal then
 				return nil, true
 			end
-
+			
+			-- Joker activates when each card scores and applie a random seal if the card doesnt already have a seal
 			return {
 				extra = {
 					message = "Sealed",
@@ -302,17 +305,8 @@ SMODS.Joker:take_ownership("scholar", {
 					card = card,
 					func = function()
 						if scored_ace and scored_ace.set_seal and not scored_ace.seal then
-							G.E_MANAGER:add_event(Event({
-								trigger = 'before',
-								delay = 0.0,
-								func = function()
-									if scored_ace and scored_ace.set_seal and not scored_ace.seal then
-										scored_ace:set_seal(selected_seal, true)
-										scored_ace:juice_up()
-									end
-									return true
-								end,
-							}))
+							scored_ace:set_seal(selected_seal, true)
+							scored_ace:juice_up()
 						end
 					end,
 				}
@@ -325,12 +319,37 @@ SMODS.Joker:take_ownership("superposition", {
 	blueprint_compat = true,
 	calculate = function(self, card, context)
 		if context.joker_main then
-			-- Suppress vanilla Superposition Tarot generation; wrapped-straight logic is handled via get_straight override.
 			return nil, true
 		end
 	end,
 }, true)
 
+-- A wild card in hand satisfies all suit requirements for Flower Pot and Seeing Double.
+local function hand_has_wild(scoring_hand)
+	for _, c in ipairs(scoring_hand) do
+		if c.ability.name == 'Wild Card' then return true end
+	end
+	return false
+end
 
+SMODS.Joker:take_ownership("flower_pot", {
+	calculate = function(self, card, context)
+		if context.joker_main and hand_has_wild(context.scoring_hand) then
+			return {
+				message = localize{type='variable', key='a_xmult', vars={card.ability.extra}},
+				Xmult_mod = card.ability.extra
+			}, true
+		end
+	end,
+}, true)
 
-
+SMODS.Joker:take_ownership("seeing_double", {
+	calculate = function(self, card, context)
+		if context.joker_main and hand_has_wild(context.scoring_hand) then
+			return {
+				message = localize{type='variable', key='a_xmult', vars={card.ability.extra}},
+				Xmult_mod = card.ability.extra
+			}, true
+		end
+	end,
+}, true)
