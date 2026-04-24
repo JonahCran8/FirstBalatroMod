@@ -40,6 +40,14 @@ return {
                     "wrap around {C:attention}Aces{}",
                     "(ex: {C:attention}Q K A 2 3{})"
                 }
+            },
+            j_walkie_talkie = {
+                name = "Walkie Talkie",
+                text = {
+                    "{C:green}#1#{} in {C:green}#2#{} chance",
+                    "for each held {C:attention}10{} to not",
+                    "count towards hand size"
+                }
             }
         },
 
@@ -52,6 +60,12 @@ return {
                     "cannot be debuffed"
                 }
             }
+        }
+    },
+
+    misc = {
+        labels = {
+            firstmod_undercover = "Undercover"
         }
     }
 }

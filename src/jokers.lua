@@ -121,7 +121,7 @@ SMODS.Joker:take_ownership("gluttenous_joker", {
 SMODS.Joker:take_ownership("8_ball", {
     rarity = 2,
 	effect = "Spawn Spectral",
-	config = { extra = 8 },
+	config = { extra = 16 },
 	loc_vars = function(self, info_queue, card)
 		return { vars = { SMODS.get_probability_vars(card, 1, card.ability.extra, '8ball') } }
 	end,
@@ -273,80 +273,256 @@ SMODS.Joker:take_ownership("seance", {
 	end,
 }, true)
 
--- Scholar: queue scored Aces, then seal them all after scoring resolves.
 SMODS.Joker:take_ownership("scholar", {
 	rarity = 2,
-	blueprint_compat = true,
+	blueprint_compat = false,
 	calculate = function(self, card, context)
-		if not context then return nil, true end
-
 		if context.before then
-			card.scholar_queued_aces = nil
-			card.scholar_apply_scheduled = nil
-			if type(context.full_hand) == "table" then
-				for _, hand_card in ipairs(context.full_hand) do
-					if hand_card then hand_card.scholar_queued = nil end
+			card.scholar_aces = {}
+			for _, c in ipairs(context.scoring_hand or {}) do
+				if c and c:get_id() == 14 and c.set_seal and not c.seal then
+					card.scholar_aces[#card.scholar_aces + 1] = c
 				end
-			end
-		end
-
-		if context.individual and context.cardarea == G.play and context.other_card and context.other_card:get_id() == 14 then
-			if context.repetition then return nil, true end
-			if context.other_card.set_seal and not context.other_card.seal and not context.other_card.scholar_queued then
-				if type(card.scholar_queued_aces) ~= "table" then
-					card.scholar_queued_aces = {}
-				end
-				context.other_card.scholar_queued = true
-				card.scholar_queued_aces[#card.scholar_queued_aces + 1] = context.other_card
 			end
 			return nil, true
 		end
 
-		if context.after and type(card.scholar_queued_aces) == "table" and #card.scholar_queued_aces > 0 then
-			if card.scholar_apply_scheduled then return nil, true end
-			card.scholar_apply_scheduled = true
+		if context.individual and context.cardarea == G.play and context.other_card and context.other_card:get_id() == 14 then
+			return nil, true
+		end
 
-			local queued_aces = card.scholar_queued_aces
-			card.scholar_queued_aces = nil
+		if context.after then
+			local queued_aces = card.scholar_aces
+			card.scholar_aces = nil
 
-			G.E_MANAGER:add_event(Event({
-				trigger = 'after',
-				delay = 0.06,
-				func = function()
-					card.scholar_apply_scheduled = nil
-					local seals = { "Gold", "Red", "Blue", "Purple" }
-					local applied = 0
-					for _, queued_ace in ipairs(queued_aces) do
-						if queued_ace and queued_ace.set_seal and not queued_ace.seal then
-							local selected_seal = pseudorandom_element(seals, pseudoseed('scholar_seal'))
-							if selected_seal then
-								queued_ace:set_seal(selected_seal, true, true)
-								applied = applied + 1
+			if type(queued_aces) == "table" and #queued_aces > 0 then
+				G.E_MANAGER:add_event(Event({
+					trigger = 'after',
+					delay = 0.1,
+					blocking = true,
+					func = function()
+						local seals = { "Gold", "Red", "Blue", "Purple" }
+						local applied = 0
+						for _, ace in ipairs(queued_aces) do
+							if ace and ace.set_seal and not ace.seal then
+								local selected = pseudorandom_element(seals, pseudoseed('scholar_seal'))
+								if selected then
+									ace:set_seal(selected, true, true)
+									ace:juice_up(0.3, 0.3)
+									applied = applied + 1
+								end
 							end
 						end
-						if queued_ace then queued_ace.scholar_queued = nil end
-					end
+						if applied > 0 then
+							play_sound('gold_seal', 1.2, 0.4)
+							card_eval_status_text(card, 'extra', nil, nil, nil, {
+								message = "Sealed!",
+								colour = G.C.ATTENTION,
+								instant = true,
+							})
+						end
+						return true
+					end,
+				}))
+			end
+			return nil, true
+		end
+	end,
+}, true)
 
-					if applied > 0 then
-						juice_card(card)
-						card_eval_status_text(card, 'extra', nil, nil, nil, {
-							message = "Sealed",
-							colour = G.C.ATTENTION,
-							instant = true,
-						})
-						delay(0.25)
+if not _G.firstbalatromod_undercover_badge_patched and type(Card) == 'table' and type(Card.generate_UIBox_ability_table) == 'function' then
+	_G.firstbalatromod_undercover_badge_patched = true
+
+	local vanilla_generate_UIBox_ability_table = Card.generate_UIBox_ability_table
+	Card.generate_UIBox_ability_table = function(self, ...)
+		local ui = vanilla_generate_UIBox_ability_table(self, ...)
+		if self.walkie_talkie_undercover and ui and ui.badges then
+			if G and G.BADGE_COL then G.BADGE_COL.firstmod_undercover = G.C.BLUE end
+			ui.badges[#ui.badges + 1] = 'firstmod_undercover'
+		end
+		return ui
+	end
+end
+
+local function is_walkie_talkie(card)
+	return card and not card.REMOVED and card.ability and card.ability.name == 'Walkie Talkie'
+end
+
+local function get_walkie_probability_vars(odds)
+	return G.GAME and G.GAME.probabilities and G.GAME.probabilities.normal or 1, odds
+end
+
+local function is_undercover_ten(joker_card, hand_card)
+	if not (hand_card and hand_card.get_id and hand_card:get_id() == 10) then
+		return false
+	end
+
+	local walkie_odds = (joker_card.ability.extra and joker_card.ability.extra.undercover_odds) or 1
+	if walkie_odds <= 1 then
+		hand_card.walkie_talkie_undercover = true
+		return true
+	end
+
+	if hand_card.walkie_talkie_undercover == nil then
+		local seed = 'walkie_talkie_undercover' .. (hand_card.unique_val or '')
+		local numerator, denominator = get_walkie_probability_vars(walkie_odds)
+		hand_card.walkie_talkie_undercover =
+			SMODS.pseudorandom_probability(joker_card, seed, numerator, denominator, seed, true)
+	end
+	return hand_card.walkie_talkie_undercover
+end
+
+local function sync_walkie_bonus(card, show_text)
+	if not (G.hand and G.hand.cards) then return nil end
+
+	local applied = card.walkie_hand_bonus or 0
+	local desired = 0
+
+	for _, c in ipairs(G.hand.cards) do
+		if c.get_id and c:get_id() ~= 10 then
+			c.walkie_talkie_undercover = nil
+		end
+	end
+
+	for _, c in ipairs(G.hand.cards) do
+		local was_undercover = c.walkie_talkie_undercover
+		if is_undercover_ten(card, c) then
+			desired = desired + 1
+		end
+		if c.walkie_talkie_undercover ~= was_undercover then
+			c.ability_UIBox_table = nil
+		end
+	end
+
+	local delta = desired - applied
+	if delta ~= 0 then
+		G.hand:change_size(delta)
+		if G.hand.handle_card_limit then G.hand:handle_card_limit() end
+	end
+
+	card.walkie_hand_bonus = desired
+	if show_text and desired > 0 and delta ~= 0 then
+		return {
+			message = localize { type = 'variable', key = 'a_handsize', vars = { desired } },
+			colour = G.C.BLUE,
+			card = card,
+		}
+	end
+	return nil
+end
+
+if not _G.firstbalatromod_walkie_emplace_patched and type(CardArea) == 'table' and type(CardArea.emplace) == 'function' then
+	_G.firstbalatromod_walkie_emplace_patched = true
+
+	local vanilla_emplace = CardArea.emplace
+	CardArea.emplace = function(self, card, ...)
+		local ret = vanilla_emplace(self, card, ...)
+		if self == G.hand and card and card.get_id and card:get_id() == 10 and G.jokers and G.jokers.cards then
+			G.E_MANAGER:add_event(Event({
+				trigger = 'immediate',
+				func = function()
+					for _, joker in ipairs(G.jokers.cards) do
+						if is_walkie_talkie(joker) then
+							sync_walkie_bonus(joker, true)
+						end
 					end
 					return true
 				end,
 			}))
+		end
+		return ret
+	end
+end
 
+SMODS.Joker:take_ownership("walkie_talkie", {
+	config = { extra = { undercover_odds = 4 } },
+	loc_vars = function(self, info_queue, card)
+		local odds = (card and card.ability and card.ability.extra and card.ability.extra.undercover_odds) or 1
+		return { vars = { get_walkie_probability_vars(odds) } }
+	end,
+	calculate = function(self, card, context)
+		-- Suppress vanilla effect.
+		if context.individual and context.cardarea == G.play and context.other_card then
+			local id = context.other_card:get_id()
+			if id == 10 or id == 4 then return nil, true end
+		end
+
+		local function queue_walkie_sync(delay, show_text)
+			G.E_MANAGER:add_event(Event({
+				trigger = 'after',
+				delay = delay or 0,
+				func = function()
+					if card and not card.REMOVED then
+						sync_walkie_bonus(card, show_text)
+					end
+					return true
+				end,
+			}))
+			return nil
+		end
+
+		-- Cleanup when this joker leaves so bonus cannot stick.
+		if context.selling_self then
+			if G.hand and (card.walkie_hand_bonus or 0) ~= 0 then
+				G.hand:change_size(-(card.walkie_hand_bonus or 0))
+			end
+			if G.hand and G.hand.cards then
+				for _, c in ipairs(G.hand.cards) do
+					c.walkie_talkie_undercover = nil
+					c.ability_UIBox_table = nil
+				end
+			end
+			card.walkie_hand_bonus = 0
+			return nil, true
+		end
+
+		if context.remove_playing_cards and context.removed then
+			local removed_bonus = 0
+			for _, removed_card in ipairs(context.removed) do
+				if removed_card.walkie_talkie_undercover then
+					removed_bonus = removed_bonus + 1
+					removed_card.walkie_talkie_undercover = nil
+					removed_card.ability_UIBox_table = nil
+				end
+			end
+			if removed_bonus > 0 then
+				G.hand:change_size(-removed_bonus)
+				card.walkie_hand_bonus = math.max(0, (card.walkie_hand_bonus or 0) - removed_bonus)
+				if G.hand.handle_card_limit then G.hand:handle_card_limit() end
+			end
+			queue_walkie_sync(0.05, false)
+			return nil, true
+		end
+
+		if context.first_hand_drawn then
+			queue_walkie_sync(0, true)
+			return nil, true
+		end
+
+		if context.after then
+			queue_walkie_sync(0.1, false)
+			return nil, true
+		end
+
+		if context.discard then
+			queue_walkie_sync(0.6, false)
+			return nil, true
+		end
+
+		if context.playing_card_added or context.setting_blind then
+			queue_walkie_sync(0, false)
+			return nil, true
+		end
+
+		if context.using_consumeable then
+			queue_walkie_sync(0.4, false)
 			return nil, true
 		end
 	end,
 }, true)
 
 SMODS.Joker:take_ownership("superposition", {
-	blueprint_compat = true,
+	blueprint_compat = false,
 	calculate = function(self, card, context)
 		if context.joker_main then
 			return nil, true
@@ -354,7 +530,6 @@ SMODS.Joker:take_ownership("superposition", {
 	end,
 }, true)
 
--- A wild card in hand satisfies all suit requirements for Flower Pot and Seeing Double.
 local function hand_has_wild(scoring_hand)
 	for _, c in ipairs(scoring_hand) do
 		if c.ability.name == 'Wild Card' then return true end

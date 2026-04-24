@@ -4,3 +4,6 @@ if jokers_file then jokers_file() end
 
 local enhancements_file = SMODS.load_file("src/enhancements.lua")
 if enhancements_file then enhancements_file() end
+
+local jokerdisplay_file = SMODS.load_file("src/jokerdisplay.lua")
+if jokerdisplay_file then jokerdisplay_file() end
